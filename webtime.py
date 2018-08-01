@@ -260,6 +260,7 @@ class QueryHostEngine:
         @param debug - if we are debugging
         """
         assert type(config)==configparser.ConfigParser
+        self.windowdays= 30
         self.config    = config
         self.db        = db.mysql( config)
         self.debug     = debug
@@ -339,6 +340,14 @@ class QueryHostEngine:
             qdatetime = datetime.datetime.fromtimestamp(time.time(),pytz.utc)
             qtime = qdatetime.time().isoformat()
             qdate = qdatetime.date().isoformat()
+            
+            # Check if host is well-behaved
+            windowstart = qdate - datetime.timedelta(days=self.windowdays) # Beginning of the well-behaved window
+            if not self.db.select1("SELECT SUM(wtcount) FROM dated BETWEEN %s and %s", (windowstart, qdate)):
+                (wbsince, qlast) = self.db.select1("SELECT wbsince, qlast FROM wbhosts WHERE host=%s", (qhost,))
+                if qlast == qdate:
+                    continue
+                self.db.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate, qhost))     
 
             # Make sure that this host is in the hosts table
             self.db.execute("INSERT IGNORE INTO hosts (host,qdatetime) VALUES (%s,now())", (qhost,))
