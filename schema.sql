@@ -84,6 +84,25 @@ CREATE TABLE `hosts` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `wbhosts`
+--
+
+DROP TABLE IF EXISTS `wbhosts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `wbhosts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `host` varchar(255) NOT NULL,
+  `qlast` date DEFAULT NULL,
+  `wbsince` date DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `host` (`host`)
+  KEY `qlast` (`qlast`)
+  KEY `wbsince` (`wbsince`),
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `hostseq`
 --
 
