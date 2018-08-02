@@ -341,16 +341,23 @@ class QueryHostEngine:
             qtime = qdatetime.time().isoformat()
             qdate = qdatetime.date().isoformat()
             
-            # Check if host is well-behaved
-            windowstart = qdate - datetime.timedelta(days=self.windowdays) # Beginning of the well-behaved window
-            if not self.db.select1("SELECT SUM(wtcount) FROM dated BETWEEN %s and %s", (windowstart, qdate)):
-                (wbsince, qlast) = self.db.select1("SELECT wbsince, qlast FROM wbhosts WHERE host=%s", (qhost,))
-                if qlast == qdate:
-                    continue
-                self.db.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate, qhost))     
-
             # Make sure that this host is in the hosts table
             self.db.execute("INSERT IGNORE INTO hosts (host,qdatetime) VALUES (%s,now())", (qhost,))
+
+            # Check if host is well behaved
+            qlast = self.db.select1("SELECT qlast FROM wbhosts WHERE host=%s", (qhost,))
+            # If there is no entry for this host (was not well behaved), check if it is now well behaved
+            if not qlast:    
+                windowstart = qdate - datetime.timedelta(days=self.windowdays) 
+                # If host is now well behaved, add to the table of well behaved hosts
+                if not self.db.select1("SELECT SUM(wtcount) FROM dated BETWEEN %s and %s", (windowstart, qdate)):
+                    self.db.execute("INSERT IGNORE INTO wbhosts (host, qlast) VALUES (%s,%s)", (qhost,qdate))
+            # If host is well behaved and already queried today, don't query
+            if qlast == qdate:
+                continue
+            # If host is well behaved and has not queried today, update latest query date then query
+            else:
+                self.db.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate,qhost))
 
             # Try to get the IPaddresses for the host
             cname = get_cname(qhost)
