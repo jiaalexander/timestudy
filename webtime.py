@@ -260,11 +260,11 @@ class QueryHostEngine:
         @param debug - if we are debugging
         """
         assert type(config)==configparser.ConfigParser
-        self.windowdays= 30
-        self.config    = config
-        self.db        = db.mysql( config)
-        self.debug     = debug
-        self.runid     = runid
+        self.windowdays = 30
+        self.config     = config
+        self.db         = db.mysql( config)
+        self.debug      = debug
+        self.runid      = runid
         if debug:
             self.db.debug  = debug
 
@@ -340,24 +340,29 @@ class QueryHostEngine:
             qdatetime = datetime.datetime.fromtimestamp(time.time(),pytz.utc)
             qtime = qdatetime.time().isoformat()
             qdate = qdatetime.date().isoformat()
-            
+
             # Make sure that this host is in the hosts table
             self.db.execute("INSERT IGNORE INTO hosts (host,qdatetime) VALUES (%s,now())", (qhost,))
 
             # Check if host is well behaved
-            qlast = self.db.select1("SELECT qlast FROM wbhosts WHERE host=%s", (qhost,))
-            # If there is no entry for this host (was not well behaved), check if it is now well behaved
-            if not qlast:    
-                windowstart = qdate - datetime.timedelta(days=self.windowdays) 
-                # If host is now well behaved, add to the table of well behaved hosts
-                if not self.db.select1("SELECT SUM(wtcount) FROM dated BETWEEN %s and %s", (windowstart, qdate)):
+            windowstart = (qdatetime.date()-datetime.timedelta(days=self.windowdays)).isoformat()
+            check_between_cmd = "SELECT SUM(wtcount) FROM dated WHERE host=%s and qdate BETWEEN %s and %s"
+            # if wtcount is 0 (the host is well behaved)
+            if not self.db.select1(check_between_cmd,(qhost,windowstart,qdate))[0]:
+                qlast_query = self.db.select1("SELECT qlast FROM wbhosts WHERE host=%s", (qhost,))
+                qlast = None if qlast_query==None else qlast_query[0]
+                # case: host was not well behaved before, now is well behaved
+                if not qlast:
                     self.db.execute("INSERT IGNORE INTO wbhosts (host, qlast) VALUES (%s,%s)", (qhost,qdate))
-            # If host is well behaved and already queried today, don't query
-            if qlast == qdate:
-                continue
-            # If host is well behaved and has not queried today, update latest query date then query
+                    self.db.commit()
+                # case: host was queried today
+                elif qlast==qdate:
+                    continue
+                # case: host was not queried today
+                else:
+                    self.db.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate, qhost))
             else:
-                self.db.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate,qhost))
+                self.db.execute("DELETE FROM wbhosts WHERE host=%s", (qhost,))
 
             # Try to get the IPaddresses for the host
             cname = get_cname(qhost)
@@ -481,8 +486,14 @@ if __name__=="__main__":
     # Determine how many entries in the database at start
     if args.debug:
         host_count = len(hosts)
-        print("Total Hosts: {:,}".format(len(host_count)))
+        print("Total Hosts: {:,}".format(host_count))
         (qcount0,ecount0,wtcount0) = dbc.select1("select sum(qcount),sum(ecount),sum(wtcount) from dated")
+        if not qcount0:
+            qcount0 = 0
+        if not ecount0:
+            ecount0 = 0
+        if not wtcount0:
+            wtcount0 = 0
         print("Initial stats:  queries: {:,}   errors: {:,}   wrong times: {:,}".format(qcount0,ecount0,wtcount0))
 
     # Query the costs, either locally or in the threads
