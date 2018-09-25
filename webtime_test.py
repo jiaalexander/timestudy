@@ -99,8 +99,7 @@ def test_get_ip_addrs():
     addrs = get_ip_addrs("google-public-dns-a.google.com")
     assert "8.8.8.8" in addrs
 
-
-def test_QueryHostEngine():
+def test_QueryHostEngine(wb=False):
     import time,datetime
     config = db.get_mysql_config(CONFIG_INI_TEST)
     mdb    = db.mysql(config)
@@ -123,7 +122,31 @@ def test_QueryHostEngine():
     qhost = GOOD_TIME
     qhe.queryhost(qhost)
 
+    qdate = day0.isoformat()
+    windowdays = 30
+    # Check if host is well behaved
+    windowstart = (day0-datetime.timedelta(days=windowdays)).isoformat()
+    check_between_cmd = "SELECT SUM(wtcount) FROM dated WHERE host=%s and qdate BETWEEN %s and %s"
+    # if wtcount is 0 (the host is well behaved)
+    if not mdb.select1(check_between_cmd,(qhost,windowstart,qdate))[0]:
+        qlast_query = mdb.select1("SELECT qlast FROM wbhosts WHERE host=%s", (qhost,))
+        qlast = None if qlast_query==None else qlast_query[0]
+        # case: host was not well behaved before, now is well behaved
+        if not qlast:
+            mdb.execute("INSERT IGNORE INTO wbhosts (host, qlast) VALUES (%s,%s)", (qhost,qdate))
+        elif qlast == qdate:
+            print("***Queried today***")
+            # case: host was not queried today
+        else:
+            mdb.execute("UPDATE wbhosts SET qlast=%s WHERE host=%s", (qdate, qhost))
+
+
     (id,ipaddr,qdate) = mdb.select1("select id,ipaddr,qdate from dated where host=%s order by id desc limit 1",(GOOD_TIME,))
+
+    if wb:
+        qlast = mdb.select1("SELECT qlast FROM wbhosts WHERE host=%s", (GOOD_TIME,))[0]
+        assert qlast.isoformat()==day0.isoformat()
+
     day1 = datetime.datetime.fromtimestamp(time.time(),pytz.utc).date()
     assert id > 0                 # make sure id is good
     assert ipaddr > ''            # 
@@ -135,7 +158,7 @@ def test_QueryHostEngine():
 
     (id,ipaddr,http) = mdb.select1("select id,ipaddr,https from dated where host=%s and https=1 order by id desc limit 1",(GOOD_TIME,))
     assert id > 0
-
+   
 def test_QueryHostEngine_Redirect():
     import time,datetime
     config = db.get_mysql_config(CONFIG_INI_TEST)
@@ -178,3 +201,7 @@ def test_get_hosts():
     # test the one that's there
     hosts = get_hosts(db.get_mysql_config(db_test.CONFIG_INI_TEST))
     assert 100 < len(hosts) < 100000
+
+
+if __name__ == "__main__":
+    test_QueryHostEngine(wb=True)
