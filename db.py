@@ -66,9 +66,6 @@ def get_mysql_driver():
 
     raise RuntimeError("Cannot find MySQL driver")
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 def make_config_ro(config):
     """Copy the user information to the ro user"""
     if config['mysql']['ro_user']=='':
@@ -93,7 +90,7 @@ def get_mysql_config(fname=None,mode='rw'):
     }
     if fname:
         config.read(fname)
-    if mode!='ro':
+    if mode=='ro':
         config['mysql']['user']   = config['mysql']['ro_user']
         config['mysql']['passwd'] = config['mysql']['ro_passwd']
     return config
@@ -179,6 +176,8 @@ class mysql:
         if self.debug:
             try:
                 if '%s' in cmd:
+                    if type(args) == list:
+                        args = tuple(args)
                     print("db.execute({})   PID:{} ".format(cmd % args,os.getpid()),end='')
                 else:
                     assert (args==None)
